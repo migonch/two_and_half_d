@@ -79,6 +79,16 @@ class BraTS2013(Dataset):
         return 1., 1., 1.
 
 
+class BinaryGT(Proxy):
+    def __init__(self, shadowed, threshold_class=2):
+        super().__init__(shadowed)
+        self.n_classes = 2
+        self.threshold_class = threshold_class
+
+    def load_gt(self, identifier):
+        return (self._shadowed.load_gt(identifier) >= self.threshold_class).astype(int)
+
+
 class CropToBrain(Proxy):
     def _bbox(self, identifier):
         boxes = [mask2bounding_box(mask) for mask in self._shadowed.load_image(identifier) > 0]
