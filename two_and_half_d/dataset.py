@@ -107,3 +107,6 @@ class ChangeSliceSpacing(Proxy):
         binary = multiclass_to_binary(self._shadowed.load_gt(identifier), labels=range(self.n_classes))
         zoomed = zoom(np.float32(binary), self._scale_factor(identifier), axes=-1)
         return np.argmax(zoomed, 0)
+
+    def load_spacing(self, identifier):
+        return (*self._shadowed.load_spacing(identifier)[:2], self.slice_spacing)
