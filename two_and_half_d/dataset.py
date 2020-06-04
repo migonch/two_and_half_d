@@ -1,5 +1,6 @@
 from pathlib import Path
 import numpy as np
+import hashlib
 import nibabel
 from medpy.io import load as load_mha
 
@@ -120,3 +121,21 @@ class ChangeSliceSpacing(Proxy):
 
     def load_spacing(self, identifier):
         return (*self._shadowed.load_spacing(identifier)[:2], self.slice_spacing)
+
+
+class ZooOfSpacings(Proxy):
+    def __init__(self, shadowed, slice_spacings, randomState=42):
+        super().__init__(shadowed)
+        self.spacings = slice_spacings
+
+    def _scale_factor(self, identifier):
+        sp_id = int(hashlib.sha1(identifier.encode('utf-8')).hexdigest(), 16) % 5
+        return self._shadowed.load_spacing(identifier)[-1] / self.spacings[sp_id]
+
+    def load_image(self, identifier):
+        return zoom(self._shadowed.load_image(identifier), self._scale_factor(identifier), axes=-1)
+
+    def load_gt(self, identifier):
+        binary = multiclass_to_binary(self._shadowed.load_gt(identifier), labels=range(self.n_classes))
+        zoomed = zoom(np.float32(binary), self._scale_factor(identifier), axes=-1)
+        return np.argmax(zoomed, 0)
