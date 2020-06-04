@@ -110,15 +110,16 @@ train(train_step, batch_iter, n_epochs=CONFIG['n_epochs'], logger=logger,
       architecture=model, optimizer=optimizer, criterion=criterion, lr=CONFIG['lr'])
 save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
 
+exp_name = f"predictions_zoo_{CONFIG['slice_spacings']}"
 commands.predict(
     ids=test_ids,
-    output_path=EXPERIMENT_PATH / FOLD / f"predictions_{CONFIG['slice_spacings']}",
+    output_path=EXPERIMENT_PATH / FOLD / exp_name,
     load_x=dataset.load_image,
     predict_fn=predict
 )
 commands.evaluate_individual_metrics(
     load_y_true=dataset.load_gt,
     metrics=individual_metrics,
-    predictions_path=EXPERIMENT_PATH / FOLD / f"predictions_{CONFIG['slice_spacings']}",
-    results_path=EXPERIMENT_PATH / FOLD / f"predictions_{CONFIG['slice_spacings']}"
+    predictions_path=EXPERIMENT_PATH / FOLD / exp_name,
+    results_path=EXPERIMENT_PATH / FOLD / exp_name
 )
