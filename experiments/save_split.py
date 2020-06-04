@@ -14,5 +14,5 @@ RANDOM_STATE = 42
 
 save_json(
     train_val_test_split(BraTS2013(BRATS_PATH).ids, val_size=VAL_SIZE, n_splits=N_FOLDS, random_state=RANDOM_STATE),
-    SPLIT_PATH / 'brats_split.json'
+    SPLIT_PATH
 )

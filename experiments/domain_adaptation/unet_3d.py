@@ -24,7 +24,6 @@ from dpipe.predict import patches_grid
 
 from two_and_half_d.dataset import BraTS2013, ChangeSliceSpacing, CropToBrain
 from two_and_half_d.metric import to_binary
-from two_and_half_d.predict import slicewisely
 
 
 BRATS_PATH = Path(sys.argv[1])
@@ -33,12 +32,11 @@ EXPERIMENT_PATH = Path(sys.argv[3])
 FOLD = sys.argv[4]
 
 CONFIG = {
-    'source_slice_spacing': 3.,
-    'target_slice_spacing': 1.,
+    'source_slice_spacing': 5.,
     'batch_size': 5,
     'batches_per_epoch': 100,
-    'n_epochs': 100,
-    'lr': 1e-3,
+    'n_epochs': 300,
+    'lr': 1e-4,
     'device': 'cuda',
 }
 
@@ -53,7 +51,6 @@ PATCH_SIZE = np.array([64, 64, 32])
 raw_dataset = BraTS2013(BRATS_PATH)
 dataset = apply(CropToBrain(raw_dataset), load_image=partial(min_max_scale, axes=0))
 train_dataset = cache_methods(ChangeSliceSpacing(dataset, new_slice_spacing=CONFIG['source_slice_spacing']))
-test_dataset = ChangeSliceSpacing(dataset, new_slice_spacing=CONFIG['target_slice_spacing'])
 
 # cross validation
 split = load_json(SPLIT_PATH)
@@ -107,18 +104,21 @@ val_metrics = convert_to_aggregated(individual_metrics)
 logger = TBLogger(EXPERIMENT_PATH / FOLD / 'logs')
 save_json(CONFIG, EXPERIMENT_PATH / 'config.json')
 train(train_step, batch_iter, n_epochs=CONFIG['n_epochs'], logger=logger,
-      validate=lambda : compute_metrics(predict, test_dataset.load_image, test_dataset.load_gt, val_ids, val_metrics),
+      validate=lambda : compute_metrics(predict, train_dataset.load_image, train_dataset.load_gt, val_ids, val_metrics),
       architecture=model, optimizer=optimizer, criterion=criterion, lr=CONFIG['lr'])
 save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
-commands.predict(
-    ids=test_ids,
-    output_path=EXPERIMENT_PATH / FOLD / 'test_predictions',
-    load_x=test_dataset.load_image,
-    predict_fn=predict
-)
-commands.evaluate_individual_metrics(
-    load_y_true=test_dataset.load_gt,
-    metrics=individual_metrics,
-    predictions_path=EXPERIMENT_PATH / FOLD / 'test_predictions',
-    results_path=EXPERIMENT_PATH / FOLD / 'test_metrics'
-)
+
+for target_slice_spacing in np.linspace(1, 5, 9):
+    test_dataset = ChangeSliceSpacing(dataset, new_slice_spacing=target_slice_spacing)
+    commands.predict(
+        ids=test_ids,
+        output_path=EXPERIMENT_PATH / FOLD / f"predictions_{CONFIG['source_slice_spacing']}_to_{target_slice_spacing}",
+        load_x=test_dataset.load_image,
+        predict_fn=predict
+    )
+    commands.evaluate_individual_metrics(
+        load_y_true=test_dataset.load_gt,
+        metrics=individual_metrics,
+        predictions_path=EXPERIMENT_PATH / FOLD / f"predictions_{CONFIG['source_slice_spacing']}_to_{target_slice_spacing}",
+        results_path=EXPERIMENT_PATH / FOLD / f"metrics_{CONFIG['source_slice_spacing']}_to_{target_slice_spacing}"
+    )
