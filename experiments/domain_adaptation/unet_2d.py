@@ -37,6 +37,7 @@ FOLD = sys.argv[4]
 
 CONFIG = {
     'source_slice_spacing': 1.,
+    'target_slice_spacing': np.linspace(1, 5, 9),
     'batch_size': 30,
     'batches_per_epoch': 100,
     'n_epochs': 100,
@@ -110,7 +111,7 @@ train(train_step, batch_iter, n_epochs=CONFIG['n_epochs'], logger=logger,
       architecture=model, optimizer=optimizer, criterion=criterion, lr=CONFIG['lr'])
 save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
 
-for target_slice_spacing in np.linspace(1, 5, 9):
+for target_slice_spacing in CONFIG['target_slice_spacing']:
     test_dataset = ChangeSliceSpacing(dataset, new_slice_spacing=target_slice_spacing)
     commands.predict(
         ids=test_ids,
