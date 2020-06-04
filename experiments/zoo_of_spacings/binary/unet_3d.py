@@ -1,3 +1,4 @@
+import random
 from functools import partial
 import sys
 from pathlib import Path
@@ -11,9 +12,11 @@ import torch.nn.functional as F
 from dpipe import layers
 from dpipe.batch_iter import Infinite, load_by_random_id, apply_at, unpack_args, multiply, combine_pad, random_apply
 from dpipe.dataset.wrappers import apply, cache_methods
-from dpipe.im import min_max_scale
+from dpipe.im import min_max_scale, crop_to_box
+from dpipe.im.box import get_centered_box
 from dpipe.im.metrics import dice_score, convert_to_aggregated
-from dpipe.im.patch import get_random_patch
+from dpipe.im.patch import get_random_patch, sample_box_center_uniformly
+from dpipe.im.shape_utils import prepend_dims
 from dpipe.io import load_json, save_json
 from dpipe.predict import add_extract_dims
 from dpipe.torch import train_step, save_model_state, inference_step
@@ -21,9 +24,9 @@ from dpipe.train import train, TBLogger
 from dpipe import commands
 from dpipe.train.validator import compute_metrics
 from dpipe.predict import patches_grid
+from two_and_half_d.batch_iter import tumor_sampling
 
 from two_and_half_d.dataset import BraTS2013, ZooOfSpacings, CropToBrain
-from two_and_half_d.metric import to_binary
 
 
 BRATS_PATH = Path(sys.argv[1])
@@ -59,8 +62,10 @@ train_ids, val_ids, test_ids = split[int(FOLD)]
 # batch iterator
 batch_iter = Infinite(
     load_by_random_id(train_dataset.load_image, train_dataset.load_gt, ids=train_ids),
-    unpack_args(get_random_patch, patch_size=PATCH_SIZE),
+    unpack_args(tumor_sampling, patch_size=PATCH_SIZE, tumor_p=.5),
     random_apply(.5, unpack_args(lambda image, gt: (np.flip(image, 1), np.flip(gt, 0)))),
+    apply_at(1, prepend_dims),
+    apply_at(1, np.float32),
     batch_size=CONFIG['batch_size'], batches_per_epoch=CONFIG['batches_per_epoch']
 )
 
@@ -81,21 +86,24 @@ model = nn.Sequential(
         ],
         kernel_size=3, padding=1
     ),
-    layers.PreActivation3d(8, dataset.n_classes, kernel_size=1)
+    layers.PreActivation3d(8, 1, kernel_size=1)
 ).to(CONFIG['device'])
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['lr'])
+
 
 # predict
 @patches_grid(patch_size=PATCH_SIZE, stride=7 * PATCH_SIZE // 8)
-@add_extract_dims(1)
+@add_extract_dims(1, 2)
 def predict(image):
-    return inference_step(image, architecture=model, activation=nn.Softmax(1))
+    return inference_step(image, architecture=model, activation=torch.sigmoid)
 
 
 # metrics
-individual_metrics = {f'class {c} dice': to_binary(dice_score, c) for c in range(dataset.n_classes)}
+individual_metrics = {
+    'dice': lambda gt, pred: dice_score(gt.astype(bool), pred >= .5)
+}
 val_metrics = convert_to_aggregated(individual_metrics)
 
 # run experiment
@@ -106,16 +114,15 @@ train(train_step, batch_iter, n_epochs=CONFIG['n_epochs'], logger=logger,
       architecture=model, optimizer=optimizer, criterion=criterion, lr=CONFIG['lr'])
 save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
 
-exp_name = f"predictions_zoo_{CONFIG['slice_spacings']}"
 commands.predict(
     ids=test_ids,
-    output_path=EXPERIMENT_PATH / FOLD / exp_name,
+    output_path=EXPERIMENT_PATH / FOLD / 'test_predictions',
     load_x=dataset.load_image,
     predict_fn=predict
 )
 commands.evaluate_individual_metrics(
     load_y_true=dataset.load_gt,
     metrics=individual_metrics,
-    predictions_path=EXPERIMENT_PATH / FOLD / exp_name,
-    results_path=EXPERIMENT_PATH / FOLD / exp_name
+    predictions_path=EXPERIMENT_PATH / FOLD / 'test_predictions',
+    results_path=EXPERIMENT_PATH / FOLD / 'test_metrics'
 )

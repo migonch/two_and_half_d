@@ -21,17 +21,13 @@ from dpipe.torch import train_step, save_model_state, inference_step
 from dpipe.train import train, TBLogger
 from dpipe import commands
 from dpipe.train.validator import compute_metrics
+from two_and_half_d.batch_iter import get_random_slices
 
 from two_and_half_d.dataset import BraTS2013, ChangeSliceSpacing, CropToBrain, BinaryGT
 from two_and_half_d.metric import to_binary
 from two_and_half_d.torch_module import Quasi3DWrapper, CRFWrapper
 
 from crfseg import CRF
-
-
-def get_random_slices(image, spacing, gt, n_slices):
-    image, gt = get_random_patch(image, gt, patch_size=n_slices)
-    return image, spacing, gt
 
 
 BRATS_PATH = Path(sys.argv[1])

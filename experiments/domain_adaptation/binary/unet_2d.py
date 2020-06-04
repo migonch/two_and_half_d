@@ -20,15 +20,11 @@ from dpipe.torch import train_step, save_model_state, inference_step
 from dpipe.train import train, TBLogger
 from dpipe import commands
 from dpipe.train.validator import compute_metrics
+from two_and_half_d.batch_iter import get_random_slice
 
 from two_and_half_d.dataset import BraTS2013, ChangeSliceSpacing, CropToBrain, BinaryGT
 from two_and_half_d.metric import to_binary
 from two_and_half_d.predict import slicewisely
-
-
-def get_random_slice(*arrays):
-    slc = np.random.randint(arrays[0].shape[-1])
-    return [a[..., slc] for a in arrays]
 
 
 BRATS_PATH = Path(sys.argv[1])

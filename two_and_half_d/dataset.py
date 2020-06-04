@@ -124,13 +124,16 @@ class ChangeSliceSpacing(Proxy):
 
 
 class ZooOfSpacings(Proxy):
-    def __init__(self, shadowed, slice_spacings, randomState=42):
+    def __init__(self, shadowed, slice_spacings):
         super().__init__(shadowed)
-        self.spacings = slice_spacings
+        self.slice_spacings = slice_spacings
+
+    def load_spacing(self, identifier):
+        idx = int(hashlib.sha1(identifier.encode('utf-8')).hexdigest(), 16) % len(self.slice_spacings)
+        return (*self._shadowed.load_spacing(identifier)[:2], self.slice_spacings[idx])
 
     def _scale_factor(self, identifier):
-        sp_id = int(hashlib.sha1(identifier.encode('utf-8')).hexdigest(), 16) % 5
-        return self._shadowed.load_spacing(identifier)[-1] / self.spacings[sp_id]
+        return self._shadowed.load_spacing(identifier)[-1] / self.load_spacing(identifier)[-1]
 
     def load_image(self, identifier):
         return zoom(self._shadowed.load_image(identifier), self._scale_factor(identifier), axes=-1)

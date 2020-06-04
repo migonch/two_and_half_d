@@ -24,21 +24,9 @@ from dpipe.train import train, TBLogger
 from dpipe import commands
 from dpipe.train.validator import compute_metrics
 from dpipe.predict import patches_grid
+from two_and_half_d.batch_iter import tumor_sampling
 
 from two_and_half_d.dataset import BraTS2013, ChangeSliceSpacing, CropToBrain, BinaryGT
-
-
-def tumor_sampling(image, gt, patch_size, tumor_p=.5):
-    def center_is_valid(center, box_size, shape):
-        start, stop = get_centered_box(center, box_size)
-        return np.all(start >= 0) and np.all(stop <= np.asarray(shape))
-
-    center = random.choice(np.argwhere(gt))
-    if np.random.binomial(1, 1 - tumor_p) or not center_is_valid(center, patch_size, gt.shape):
-        center = sample_box_center_uniformly(gt.shape, patch_size)
-
-    box = get_centered_box(center, patch_size)
-    return crop_to_box(image, box), crop_to_box(gt, box)
 
 
 BRATS_PATH = Path(sys.argv[1])
