@@ -32,12 +32,12 @@ EXPERIMENT_PATH = Path(sys.argv[3])
 FOLD = sys.argv[4]
 
 CONFIG = {
-    'source_slice_spacing': 3.,
+    'source_slice_spacing': 1.,
     'target_slice_spacing': np.linspace(1, 5, 9),
     'batch_size': 30,
     'batches_per_epoch': 100,
     'n_epochs': 100,
-    'lr': 1e-3,
+    'lr': 3e-4,
     'device': 'cuda',
 }
 

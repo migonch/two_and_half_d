@@ -23,7 +23,6 @@ from dpipe.train.validator import compute_metrics
 from two_and_half_d.batch_iter import get_random_slice
 
 from two_and_half_d.dataset import BraTS2013, ZooOfSpacings, CropToBrain, BinaryGT
-from two_and_half_d.metric import to_binary
 from two_and_half_d.predict import slicewisely
 
 

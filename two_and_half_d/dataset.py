@@ -8,6 +8,7 @@ from dpipe.dataset import Dataset
 from dpipe.dataset.wrappers import Proxy
 from dpipe.im import zoom, crop_to_box
 from dpipe.im.box import mask2bounding_box
+from dpipe.im.utils import apply_along_axes
 from dpipe.io import load
 
 from two_and_half_d.processing import multiclass_to_binary
@@ -118,6 +119,7 @@ class ChangeSliceSpacing(Proxy):
     def load_gt(self, identifier):
         binary = multiclass_to_binary(self._shadowed.load_gt(identifier), labels=range(self.n_classes))
         zoomed = zoom(np.float32(binary), self._scale_factor(identifier), axes=-1)
+        # zoomed = np.stack([zoom(b, self._scale_factor(identifier), axes=-1) for b in np.float32(binary)])
         return np.argmax(zoomed, 0)
 
     def load_spacing(self, identifier):
@@ -142,4 +144,5 @@ class ZooOfSpacings(Proxy):
     def load_gt(self, identifier):
         binary = multiclass_to_binary(self._shadowed.load_gt(identifier), labels=range(self.n_classes))
         zoomed = zoom(np.float32(binary), self._scale_factor(identifier), axes=-1)
+        # zoomed = np.stack([zoom(b, self._scale_factor(identifier), axes=-1) for b in np.float32(binary)])
         return np.argmax(zoomed, 0)
