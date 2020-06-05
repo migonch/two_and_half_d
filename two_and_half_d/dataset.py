@@ -42,7 +42,7 @@ class WMH(Dataset):
 
 class BraTS2013(Dataset):
     n_modalities = 4
-    n_classes = 4
+    n_classes = 5
 
     def __init__(self, root):
         self.root = Path(root)
@@ -81,13 +81,14 @@ class BraTS2013(Dataset):
 
 
 class BinaryGT(Proxy):
-    def __init__(self, shadowed, threshold_class=2):
+    def __init__(self, shadowed, positive_classes=(1, 2, 3, 4)):
         super().__init__(shadowed)
         self.n_classes = 2
-        self.threshold_class = threshold_class
+        self.positive_classes = positive_classes
 
     def load_gt(self, identifier):
-        return (self._shadowed.load_gt(identifier) >= self.threshold_class).astype(int)
+        """ load bool gt """
+        return np.isin(self._shadowed.load_gt(identifier), self.positive_classes)
 
 
 class CropToBrain(Proxy):

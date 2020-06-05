@@ -26,8 +26,7 @@ from dpipe.train.validator import compute_metrics
 from dpipe.predict import patches_grid
 from two_and_half_d.batch_iter import tumor_sampling
 
-from two_and_half_d.dataset import BraTS2013, ZooOfSpacings, CropToBrain
-
+from two_and_half_d.dataset import BraTS2013, ZooOfSpacings, CropToBrain, BinaryGT
 
 BRATS_PATH = Path(sys.argv[1])
 SPLIT_PATH = Path(sys.argv[2])
@@ -35,6 +34,7 @@ EXPERIMENT_PATH = Path(sys.argv[3])
 FOLD = sys.argv[4]
 
 CONFIG = {
+    'positive_classes': [1, 2, 3, 4],
     'slice_spacings': [1, 1.5, 2, 2.5, 3],
     'batch_size': 5,
     'batches_per_epoch': 100,
@@ -51,7 +51,7 @@ except (IndexError, FileNotFoundError):
 PATCH_SIZE = np.array([64, 64, 32])
 
 # dataset
-raw_dataset = BraTS2013(BRATS_PATH)
+raw_dataset = BinaryGT(BraTS2013(BRATS_PATH), positive_classes=CONFIG['positive_classes'])
 dataset = apply(CropToBrain(raw_dataset), load_image=partial(min_max_scale, axes=0))
 train_dataset = cache_methods(ZooOfSpacings(dataset, slice_spacings=CONFIG['slice_spacings']))
 
@@ -116,13 +116,13 @@ save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
 
 commands.predict(
     ids=test_ids,
-    output_path=EXPERIMENT_PATH / FOLD / 'test_predictions',
+    output_path=EXPERIMENT_PATH / FOLD / 'predictions',
     load_x=dataset.load_image,
     predict_fn=predict
 )
 commands.evaluate_individual_metrics(
     load_y_true=dataset.load_gt,
     metrics=individual_metrics,
-    predictions_path=EXPERIMENT_PATH / FOLD / 'test_predictions',
-    results_path=EXPERIMENT_PATH / FOLD / 'test_metrics'
+    predictions_path=EXPERIMENT_PATH / FOLD / 'predictions',
+    results_path=EXPERIMENT_PATH / FOLD / 'metrics'
 )

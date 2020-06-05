@@ -33,6 +33,7 @@ EXPERIMENT_PATH = Path(sys.argv[3])
 FOLD = sys.argv[4]
 
 CONFIG = {
+    'positive_classes': [1, 2, 3, 4],
     'slice_spacings': np.linspace(1, 3, 5),
     'batch_size': 30,
     'batches_per_epoch': 100,
@@ -47,7 +48,7 @@ except (IndexError, FileNotFoundError):
     pass
 
 # dataset
-raw_dataset = BinaryGT(BraTS2013(BRATS_PATH))
+raw_dataset = BinaryGT(BraTS2013(BRATS_PATH), positive_classes=CONFIG['positive_classes'])
 dataset = apply(CropToBrain(raw_dataset), load_image=partial(min_max_scale, axes=0))
 train_dataset = cache_methods(ZooOfSpacings(dataset, slice_spacings=CONFIG['slice_spacings']))
 
@@ -113,13 +114,13 @@ save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
 
 commands.predict(
     ids=test_ids,
-    output_path=EXPERIMENT_PATH / FOLD / 'test_predictions',
+    output_path=EXPERIMENT_PATH / FOLD / 'predictions',
     load_x=dataset.load_image,
     predict_fn=predict
 )
 commands.evaluate_individual_metrics(
     load_y_true=dataset.load_gt,
     metrics=individual_metrics,
-    predictions_path=EXPERIMENT_PATH / FOLD / 'test_predictions',
-    results_path=EXPERIMENT_PATH / FOLD / 'test_metrics'
+    predictions_path=EXPERIMENT_PATH / FOLD / 'predictions',
+    results_path=EXPERIMENT_PATH / FOLD / 'metrics'
 )

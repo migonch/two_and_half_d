@@ -6,26 +6,24 @@ import numpy as np
 
 import torch
 from torch import nn
-import torch.nn.functional as F
 
 from dpipe import layers
-from dpipe.batch_iter import Infinite, load_by_random_id, apply_at, unpack_args, multiply, combine_pad, random_apply
+from dpipe.batch_iter import Infinite, load_by_random_id, apply_at, unpack_args, combine_pad, random_apply
 from dpipe.dataset.wrappers import apply, cache_methods
 from dpipe.im import min_max_scale
 from dpipe.im.metrics import dice_score, convert_to_aggregated
-from dpipe.im.patch import get_random_patch
 from dpipe.im.shape_utils import prepend_dims
 from dpipe.io import load_json, save_json
 from dpipe.predict import add_extract_dims
-from dpipe.torch import train_step, save_model_state, inference_step
-from dpipe.train import train, TBLogger
+from dpipe.torch import save_model_state, inference_step, load_model_state
+from dpipe.train import train, TBLogger, Switch
 from dpipe import commands
 from dpipe.train.validator import compute_metrics
 from two_and_half_d.batch_iter import get_random_slices
 
 from two_and_half_d.dataset import BraTS2013, ChangeSliceSpacing, CropToBrain, BinaryGT
-from two_and_half_d.metric import to_binary
-from two_and_half_d.torch_module import Quasi3DWrapper, CRFWrapper
+from two_and_half_d.metric import binary_to_bool, drop_spacing, surface_dice
+from two_and_half_d.torch_module import Quasi3DWrapper, CRFWrapper, crf_train_step
 
 from crfseg import CRF
 
@@ -36,12 +34,13 @@ EXPERIMENT_PATH = Path(sys.argv[3])
 FOLD = sys.argv[4]
 
 CONFIG = {
+    'positive_classes': (1, 2, 3, 4),
     'source_slice_spacing': 1.,
     'target_slice_spacing': np.linspace(1, 5, 9),
     'n_slices': 15,
     'batch_size': 3,
     'batches_per_epoch': 100,
-    'n_epochs': 100,
+    'n_epochs': 200,
     'lr': 3e-4,
     'device': 'cuda',
 }
@@ -52,7 +51,7 @@ except (IndexError, FileNotFoundError):
     pass
 
 # dataset
-raw_dataset = BinaryGT(BraTS2013(BRATS_PATH))
+raw_dataset = BinaryGT(BraTS2013(BRATS_PATH), positive_classes=CONFIG['positive_classes'])
 dataset = apply(CropToBrain(raw_dataset), load_image=partial(min_max_scale, axes=0))
 train_dataset = cache_methods(ChangeSliceSpacing(dataset, new_slice_spacing=CONFIG['source_slice_spacing']))
 
@@ -94,6 +93,7 @@ model = CRFWrapper(Quasi3DWrapper(unet_2d), CRF(n_spatial_dims=3, filter_size=5)
 
 criterion = nn.BCEWithLogitsLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['lr'])
+with_crf = Switch(False, epoch_to_value={100: True})
 
 
 # predict
@@ -105,20 +105,29 @@ def predict(image, spacing):
 
 # metrics
 individual_metrics = {
-    'dice': lambda gt, pred: dice_score(gt.astype(bool), pred >= .5)
+    'dice': binary_to_bool(drop_spacing(dice_score)),
+    'surface_dice': binary_to_bool(surface_dice),
 }
 val_metrics = convert_to_aggregated(individual_metrics)
 
 
 # run experiment
 logger = TBLogger(EXPERIMENT_PATH / FOLD / 'logs')
-save_json(CONFIG, EXPERIMENT_PATH / 'config.json')
-train(train_step, batch_iter, n_epochs=CONFIG['n_epochs'], logger=logger,
-      validate=lambda : compute_metrics(predict, lambda i: (train_dataset.load_image(i), train_dataset.load_spacing(i)),
-                                        train_dataset.load_gt, val_ids, val_metrics),
-      architecture=model, optimizer=optimizer, criterion=criterion, lr=CONFIG['lr'])
-save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
+commands.populate(EXPERIMENT_PATH / 'config.json', save_json, CONFIG, EXPERIMENT_PATH / 'config.json')
+commands.populate(EXPERIMENT_PATH / FOLD / 'model.pth', lambda : [
+    train(crf_train_step, batch_iter, n_epochs=CONFIG['n_epochs'], logger=logger,
+          validate=lambda : compute_metrics(
+              predict=predict,
+              load_x=lambda i: (train_dataset.load_image(i), train_dataset.load_spacing(i)),
+              load_y=lambda i: (train_dataset.load_gt(i), train_dataset.load_spacing(i)),
+              ids=val_ids,
+              metrics=val_metrics
+          ),
+          architecture=model, optimizer=optimizer, criterion=criterion, lr=CONFIG['lr'], with_crf=with_crf),
+    save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
+])
 
+load_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
 for target_slice_spacing in CONFIG['target_slice_spacing']:
     test_dataset = ChangeSliceSpacing(dataset, new_slice_spacing=target_slice_spacing)
     commands.predict(
@@ -128,7 +137,7 @@ for target_slice_spacing in CONFIG['target_slice_spacing']:
         predict_fn=predict
     )
     commands.evaluate_individual_metrics(
-        load_y_true=test_dataset.load_gt,
+        load_y_true=lambda i: (test_dataset.load_gt(i), test_dataset.load_spacing(i)),
         metrics=individual_metrics,
         predictions_path=EXPERIMENT_PATH / FOLD / f"predictions_{CONFIG['source_slice_spacing']}_to_{target_slice_spacing}",
         results_path=EXPERIMENT_PATH / FOLD / f"metrics_{CONFIG['source_slice_spacing']}_to_{target_slice_spacing}"

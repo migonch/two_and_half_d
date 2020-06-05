@@ -22,7 +22,7 @@ def tumor_sampling(image, gt, patch_size, tumor_p=.5):
         start, stop = get_centered_box(center, box_size)
         return np.all(start >= 0) and np.all(stop <= np.asarray(shape))
 
-    center = random.choice(np.argwhere(gt))
+    center = random.choice(np.argwhere(gt > 0))
     if np.random.binomial(1, 1 - tumor_p) or not center_is_valid(center, patch_size, gt.shape):
         center = sample_box_center_uniformly(gt.shape, patch_size)
 
