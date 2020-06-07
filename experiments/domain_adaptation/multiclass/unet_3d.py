@@ -33,7 +33,7 @@ EXPERIMENT_PATH = Path(sys.argv[3])
 FOLD = sys.argv[4]
 
 CONFIG = {
-    'source_slice_spacing': 3.,
+    'source_slice_spacing': 1.,
     'target_slice_spacing': np.linspace(1, 5, 9),
     'batch_size': 5,
     'batches_per_epoch': 100,

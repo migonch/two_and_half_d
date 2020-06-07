@@ -52,8 +52,10 @@ PATCH_SIZE = np.array([64, 64, 32])
 
 # dataset
 raw_dataset = BinaryGT(BraTS2013(BRATS_PATH), positive_classes=CONFIG['positive_classes'])
-dataset = apply(CropToBrain(raw_dataset), load_image=partial(min_max_scale, axes=0))
-train_dataset = cache_methods(ZooOfSpacings(dataset, slice_spacings=CONFIG['slice_spacings']))
+dataset = cache_methods(ZooOfSpacings(
+    apply(CropToBrain(raw_dataset), load_image=partial(min_max_scale, axes=0)),
+    slice_spacings=CONFIG['slice_spacings']
+))
 
 # cross validation
 split = load_json(SPLIT_PATH)
@@ -61,7 +63,7 @@ train_ids, val_ids, test_ids = split[int(FOLD)]
 
 # batch iterator
 batch_iter = Infinite(
-    load_by_random_id(train_dataset.load_image, train_dataset.load_gt, ids=train_ids),
+    load_by_random_id(dataset.load_image, dataset.load_gt, ids=train_ids),
     unpack_args(tumor_sampling, patch_size=PATCH_SIZE, tumor_p=.5),
     random_apply(.5, unpack_args(lambda image, gt: (np.flip(image, 1), np.flip(gt, 0)))),
     apply_at(1, prepend_dims),
@@ -110,7 +112,7 @@ val_metrics = convert_to_aggregated(individual_metrics)
 logger = TBLogger(EXPERIMENT_PATH / FOLD / 'logs')
 save_json(CONFIG, EXPERIMENT_PATH / 'config.json')
 train(train_step, batch_iter, n_epochs=CONFIG['n_epochs'], logger=logger,
-      validate=lambda : compute_metrics(predict, train_dataset.load_image, train_dataset.load_gt, val_ids, val_metrics),
+      validate=lambda : compute_metrics(predict, dataset.load_image, dataset.load_gt, val_ids, val_metrics),
       architecture=model, optimizer=optimizer, criterion=criterion, lr=CONFIG['lr'])
 save_model_state(model, EXPERIMENT_PATH / FOLD / 'model.pth')
 
